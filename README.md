@@ -42,6 +42,12 @@ Then run the compiled binary directly:
 # 1 has no prime factors
 ```
 
+Use `--timeout` to cap a normal factorization attempt:
+
+```bash
+./target/release/primes --timeout 60 340282366920938461286658806734041124249
+```
+
 ## Algorithm
 
 The app chooses the factorization method from the input length:
@@ -59,15 +65,21 @@ Use `--debug` to compare the three implemented algorithms:
 ./target/release/primes --debug 1000000016000000063
 ```
 
+Set a longer per-algorithm timeout when needed:
+
+```bash
+./target/release/primes --debug --timeout 60 340282366920938461286658806734041124249
+```
+
 Debug mode reports:
 
 - original trial division
 - `6k +/- 1` trial division
 - Pollard's Rho
 
-Each algorithm runs in a separate process with a 5-second timeout, so very slow
-trial-division cases do not block the whole comparison forever. For meaningful
-timings, run the release binary rather than `cargo run`.
+Each algorithm runs in a separate process. Debug mode uses a 5-second timeout by
+default, so very slow trial-division cases do not block the whole comparison
+forever. For meaningful timings, run the release binary rather than `cargo run`.
 
 If the automatically selected algorithm times out, debug mode reports that
 instead of blocking while trying to print the final factorization.

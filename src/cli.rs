@@ -10,15 +10,17 @@ use crate::algorithms::{
     prime_factors,
 };
 
-const DEBUG_ALGORITHM_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_DEBUG_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CliCommand {
     Factor {
         number: u128,
+        timeout: Option<Duration>,
     },
     Debug {
         number: u128,
+        timeout: Duration,
     },
     Algorithm {
         algorithm: FactorizationAlgorithm,
@@ -45,11 +47,12 @@ pub fn run_from_env() -> i32 {
 
 fn run(args: impl Iterator<Item = String>) -> Result<(), CliError> {
     match parse_command(args).map_err(CliError::usage)? {
-        CliCommand::Factor { number } => {
-            println!("{}", format_factorization(number));
-            Ok(())
+        CliCommand::Factor { number, timeout } => {
+            print_factorization(number, timeout).map_err(CliError::runtime)
         }
-        CliCommand::Debug { number } => print_debug_timings(number).map_err(CliError::runtime),
+        CliCommand::Debug { number, timeout } => {
+            print_debug_timings(number, timeout).map_err(CliError::runtime)
+        }
         CliCommand::Algorithm { algorithm, number } => {
             let factors = factor_with_algorithm(number, algorithm);
             println!("{}", format_factorization_from_factors(number, &factors));
@@ -84,6 +87,27 @@ fn format_factorization(number: u128) -> String {
     format_factorization_from_factors(number, &prime_factors(number))
 }
 
+fn print_factorization(number: u128, timeout: Option<Duration>) -> Result<(), String> {
+    let Some(timeout) = timeout else {
+        println!("{}", format_factorization(number));
+        return Ok(());
+    };
+
+    let algorithm = factorization_algorithm(number);
+    match benchmark_algorithm(number, algorithm, timeout)? {
+        BenchmarkOutcome::Completed { output, .. } => {
+            println!("{output}");
+            Ok(())
+        }
+        BenchmarkOutcome::TimedOut { elapsed } => Err(format!(
+            "Timed out after {} using {}",
+            format_duration(elapsed),
+            algorithm.label()
+        )),
+        BenchmarkOutcome::Failed { message, .. } => Err(message),
+    }
+}
+
 fn format_factorization_from_factors(number: u128, factors: &[u128]) -> String {
     if factors.is_empty() {
         return format!("{number} has no prime factors");
@@ -101,26 +125,66 @@ fn format_factorization_from_factors(number: u128, factors: &[u128]) -> String {
 fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, String> {
     let args = args.collect::<Vec<_>>();
 
-    match args.as_slice() {
-        [number] => Ok(CliCommand::Factor {
-            number: parse_positive_integer(number)?,
-        }),
-        [flag, number] if flag == "--debug" => Ok(CliCommand::Debug {
-            number: parse_positive_integer(number)?,
-        }),
-        [number, flag] if flag == "--debug" => Ok(CliCommand::Debug {
-            number: parse_positive_integer(number)?,
-        }),
-        [flag, algorithm, number] if flag == "--algorithm" => {
-            let algorithm = FactorizationAlgorithm::from_cli_name(algorithm)
-                .ok_or_else(|| format!("Invalid algorithm: {algorithm}"))?;
+    if let [flag, algorithm, number] = args.as_slice()
+        && flag == "--algorithm"
+    {
+        let algorithm = FactorizationAlgorithm::from_cli_name(algorithm)
+            .ok_or_else(|| format!("Invalid algorithm: {algorithm}"))?;
 
-            Ok(CliCommand::Algorithm {
-                algorithm,
-                number: parse_positive_integer(number)?,
-            })
+        return Ok(CliCommand::Algorithm {
+            algorithm,
+            number: parse_positive_integer(number)?,
+        });
+    }
+
+    let mut debug = false;
+    let mut timeout = None;
+    let mut number = None;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--debug" => {
+                if debug {
+                    return Err(String::from("Duplicate --debug flag"));
+                }
+
+                debug = true;
+                index += 1;
+            }
+            "--timeout" => {
+                let seconds = args
+                    .get(index + 1)
+                    .ok_or_else(|| String::from("--timeout requires seconds"))?;
+
+                timeout = Some(parse_timeout(seconds)?);
+                index += 2;
+            }
+            value if value.starts_with("--") => return Err(format!("Invalid option: {value}")),
+            value => {
+                if number.is_some() {
+                    return Err(String::from(
+                        "Usage: primes [--debug] [--timeout <seconds>] <positive-integer>",
+                    ));
+                }
+
+                number = Some(parse_positive_integer(value)?);
+                index += 1;
+            }
         }
-        _ => Err(String::from("Usage: primes [--debug] <positive-integer>")),
+    }
+
+    let number = number.ok_or_else(|| {
+        String::from("Usage: primes [--debug] [--timeout <seconds>] <positive-integer>")
+    })?;
+
+    if debug {
+        Ok(CliCommand::Debug {
+            number,
+            timeout: timeout.unwrap_or(DEFAULT_DEBUG_TIMEOUT),
+        })
+    } else {
+        Ok(CliCommand::Factor { number, timeout })
     }
 }
 
@@ -136,7 +200,19 @@ fn parse_positive_integer(input: &str) -> Result<u128, String> {
     Ok(number)
 }
 
-fn print_debug_timings(number: u128) -> Result<(), String> {
+fn parse_timeout(input: &str) -> Result<Duration, String> {
+    let seconds = input
+        .parse::<u64>()
+        .map_err(|_| format!("Invalid timeout: {input}"))?;
+
+    if seconds == 0 {
+        return Err(String::from("Timeout must be greater than 0"));
+    }
+
+    Ok(Duration::from_secs(seconds))
+}
+
+fn print_debug_timings(number: u128, timeout: Duration) -> Result<(), String> {
     let automatic_algorithm = factorization_algorithm(number);
     let mut outcomes = Vec::new();
 
@@ -145,7 +221,7 @@ fn print_debug_timings(number: u128) -> Result<(), String> {
         FactorizationAlgorithm::SixKTrialDivision,
         FactorizationAlgorithm::PollardRho,
     ] {
-        outcomes.push((algorithm, benchmark_algorithm(number, algorithm)?));
+        outcomes.push((algorithm, benchmark_algorithm(number, algorithm, timeout)?));
     }
 
     let automatic_result = outcomes.iter().find_map(|(algorithm, outcome)| {
@@ -161,12 +237,12 @@ fn print_debug_timings(number: u128) -> Result<(), String> {
         Some(output) => println!("Result: {output}"),
         None => println!(
             "Result: automatic algorithm did not finish within {}s",
-            DEBUG_ALGORITHM_TIMEOUT.as_secs()
+            timeout.as_secs()
         ),
     }
     println!(
         "Algorithm timings ({}s timeout per algorithm):",
-        DEBUG_ALGORITHM_TIMEOUT.as_secs()
+        timeout.as_secs()
     );
 
     for (algorithm, outcome) in outcomes {
@@ -202,6 +278,7 @@ fn print_debug_timings(number: u128) -> Result<(), String> {
 fn benchmark_algorithm(
     number: u128,
     algorithm: FactorizationAlgorithm,
+    timeout: Duration,
 ) -> Result<BenchmarkOutcome, String> {
     let executable = env::current_exe()
         .map_err(|error| format!("Could not locate current executable: {error}"))?;
@@ -245,7 +322,7 @@ fn benchmark_algorithm(
         }
 
         let elapsed = started_at.elapsed();
-        if elapsed >= DEBUG_ALGORITHM_TIMEOUT {
+        if elapsed >= timeout {
             child
                 .kill()
                 .map_err(|error| format!("Could not stop timed-out benchmark: {error}"))?;
@@ -272,7 +349,8 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        CliCommand, FactorizationAlgorithm, format_duration, format_factorization, parse_command,
+        CliCommand, DEFAULT_DEBUG_TIMEOUT, FactorizationAlgorithm, format_duration,
+        format_factorization, parse_command, parse_timeout,
     };
 
     #[test]
@@ -293,11 +371,39 @@ mod tests {
     fn parses_debug_arguments() {
         assert_eq!(
             parse_command(["--debug", "84"].map(String::from).into_iter()),
-            Ok(CliCommand::Debug { number: 84 })
+            Ok(CliCommand::Debug {
+                number: 84,
+                timeout: DEFAULT_DEBUG_TIMEOUT
+            })
         );
         assert_eq!(
             parse_command(["84", "--debug"].map(String::from).into_iter()),
-            Ok(CliCommand::Debug { number: 84 })
+            Ok(CliCommand::Debug {
+                number: 84,
+                timeout: DEFAULT_DEBUG_TIMEOUT
+            })
+        );
+    }
+
+    #[test]
+    fn parses_timeout_arguments() {
+        assert_eq!(
+            parse_command(["--timeout", "30", "84"].map(String::from).into_iter()),
+            Ok(CliCommand::Factor {
+                number: 84,
+                timeout: Some(Duration::from_secs(30))
+            })
+        );
+        assert_eq!(
+            parse_command(
+                ["--debug", "--timeout", "30", "84"]
+                    .map(String::from)
+                    .into_iter()
+            ),
+            Ok(CliCommand::Debug {
+                number: 84,
+                timeout: Duration::from_secs(30)
+            })
         );
     }
 
@@ -321,5 +427,11 @@ mod tests {
         assert_eq!(format_duration(Duration::from_micros(500)), "500us");
         assert_eq!(format_duration(Duration::from_millis(2)), "2ms");
         assert_eq!(format_duration(Duration::from_millis(1_500)), "1.500s");
+    }
+
+    #[test]
+    fn rejects_invalid_timeouts() {
+        assert!(parse_timeout("0").is_err());
+        assert!(parse_timeout("abc").is_err());
     }
 }
