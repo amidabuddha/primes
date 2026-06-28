@@ -51,6 +51,24 @@ The app chooses the factorization method from the input length:
 
 The output format is the same for both paths.
 
+## Debug Timings
+
+Use `--debug` to compare the three implemented algorithms:
+
+```bash
+./target/release/primes --debug 1000000016000000063
+```
+
+Debug mode reports:
+
+- original trial division
+- `6k +/- 1` trial division
+- Pollard's Rho
+
+Each algorithm runs in a separate process with a 5-second timeout, so very slow
+trial-division cases do not block the whole comparison forever. For meaningful
+timings, run the release binary rather than `cargo run`.
+
 ## Test
 
 ```bash
