@@ -63,7 +63,7 @@ pub(crate) fn factorization_algorithm(number: u128) -> FactorizationAlgorithm {
 }
 
 pub(crate) fn decimal_digit_count(number: u128) -> usize {
-    number.to_string().len()
+    number.ilog10() as usize + 1
 }
 
 fn prime_factors_trial_original(mut number: u128) -> Vec<u128> {

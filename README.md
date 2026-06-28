@@ -48,6 +48,18 @@ Use `--timeout` to cap a normal factorization attempt:
 ./target/release/primes --timeout 60 340282366920938461286658806734041124249
 ```
 
+Print the installed version:
+
+```bash
+./target/release/primes --version
+```
+
+Show usage:
+
+```bash
+./target/release/primes --help
+```
+
 ## Algorithm
 
 The app chooses the factorization method from the input length:

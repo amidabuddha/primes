@@ -14,6 +14,8 @@ const DEFAULT_DEBUG_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CliCommand {
+    Help,
+    Version,
     Factor {
         number: u128,
         timeout: Option<Duration>,
@@ -47,6 +49,14 @@ pub fn run_from_env() -> i32 {
 
 fn run(args: impl Iterator<Item = String>) -> Result<(), CliError> {
     match parse_command(args).map_err(CliError::usage)? {
+        CliCommand::Help => {
+            println!("{}", usage());
+            Ok(())
+        }
+        CliCommand::Version => {
+            println!("primes {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
         CliCommand::Factor { number, timeout } => {
             print_factorization(number, timeout).map_err(CliError::runtime)
         }
@@ -125,6 +135,12 @@ fn format_factorization_from_factors(number: u128, factors: &[u128]) -> String {
 fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, String> {
     let args = args.collect::<Vec<_>>();
 
+    match args.as_slice() {
+        [flag] if flag == "--help" || flag == "-h" => return Ok(CliCommand::Help),
+        [flag] if flag == "--version" || flag == "-V" => return Ok(CliCommand::Version),
+        _ => {}
+    }
+
     if let [flag, algorithm, number] = args.as_slice()
         && flag == "--algorithm"
     {
@@ -163,9 +179,7 @@ fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, Strin
             value if value.starts_with("--") => return Err(format!("Invalid option: {value}")),
             value => {
                 if number.is_some() {
-                    return Err(String::from(
-                        "Usage: primes [--debug] [--timeout <seconds>] <positive-integer>",
-                    ));
+                    return Err(usage());
                 }
 
                 number = Some(parse_positive_integer(value)?);
@@ -174,9 +188,7 @@ fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, Strin
         }
     }
 
-    let number = number.ok_or_else(|| {
-        String::from("Usage: primes [--debug] [--timeout <seconds>] <positive-integer>")
-    })?;
+    let number = number.ok_or_else(usage)?;
 
     if debug {
         Ok(CliCommand::Debug {
@@ -186,6 +198,12 @@ fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, Strin
     } else {
         Ok(CliCommand::Factor { number, timeout })
     }
+}
+
+fn usage() -> String {
+    String::from(
+        "Usage: primes [--debug] [--timeout <seconds>] <positive-integer>\n       primes --version\n       primes --help",
+    )
 }
 
 fn parse_positive_integer(input: &str) -> Result<u128, String> {
@@ -365,6 +383,26 @@ mod tests {
         assert!(parse_command(["10", "20"].map(String::from).into_iter()).is_err());
         assert!(parse_command(["abc"].map(String::from).into_iter()).is_err());
         assert!(parse_command(["0"].map(String::from).into_iter()).is_err());
+    }
+
+    #[test]
+    fn parses_help_and_version_arguments() {
+        assert_eq!(
+            parse_command(["--help"].map(String::from).into_iter()),
+            Ok(CliCommand::Help)
+        );
+        assert_eq!(
+            parse_command(["-h"].map(String::from).into_iter()),
+            Ok(CliCommand::Help)
+        );
+        assert_eq!(
+            parse_command(["--version"].map(String::from).into_iter()),
+            Ok(CliCommand::Version)
+        );
+        assert_eq!(
+            parse_command(["-V"].map(String::from).into_iter()),
+            Ok(CliCommand::Version)
+        );
     }
 
     #[test]
