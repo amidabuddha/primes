@@ -42,6 +42,15 @@ Then run the compiled binary directly:
 # 1 has no prime factors
 ```
 
+## Algorithm
+
+The app chooses the factorization method from the input length:
+
+- numbers with up to 15 decimal digits use `6k +/- 1` trial division
+- longer numbers use Pollard's Rho with Miller-Rabin probable-prime checks
+
+The output format is the same for both paths.
+
 ## Test
 
 ```bash
