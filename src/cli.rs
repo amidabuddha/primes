@@ -135,10 +135,12 @@ fn format_factorization_from_factors(number: u128, factors: &[u128]) -> String {
 fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, String> {
     let args = args.collect::<Vec<_>>();
 
-    match args.as_slice() {
-        [flag] if flag == "--help" || flag == "-h" => return Ok(CliCommand::Help),
-        [flag] if flag == "--version" || flag == "-V" => return Ok(CliCommand::Version),
-        _ => {}
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        return Ok(CliCommand::Help);
+    }
+
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        return Ok(CliCommand::Version);
     }
 
     if let [flag, algorithm, number] = args.as_slice()
@@ -386,7 +388,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_help_and_version_arguments() {
+    fn parses_help_and_version_arguments_anywhere() {
         assert_eq!(
             parse_command(["--help"].map(String::from).into_iter()),
             Ok(CliCommand::Help)
@@ -401,6 +403,14 @@ mod tests {
         );
         assert_eq!(
             parse_command(["-V"].map(String::from).into_iter()),
+            Ok(CliCommand::Version)
+        );
+        assert_eq!(
+            parse_command(["84", "--help"].map(String::from).into_iter()),
+            Ok(CliCommand::Help)
+        );
+        assert_eq!(
+            parse_command(["84", "--version"].map(String::from).into_iter()),
             Ok(CliCommand::Version)
         );
     }

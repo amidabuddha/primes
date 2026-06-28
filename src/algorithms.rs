@@ -63,7 +63,7 @@ pub(crate) fn factorization_algorithm(number: u128) -> FactorizationAlgorithm {
 }
 
 pub(crate) fn decimal_digit_count(number: u128) -> usize {
-    number.ilog10() as usize + 1
+    number.checked_ilog10().unwrap_or(0) as usize + 1
 }
 
 fn prime_factors_trial_original(mut number: u128) -> Vec<u128> {
@@ -288,8 +288,9 @@ fn gcd(mut left: u128, mut right: u128) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::{
-        FactorizationAlgorithm, factorization_algorithm, is_probably_prime_miller_rabin,
-        prime_factors, prime_factors_trial_6k, prime_factors_trial_original,
+        FactorizationAlgorithm, decimal_digit_count, factorization_algorithm,
+        is_probably_prime_miller_rabin, prime_factors, prime_factors_trial_6k,
+        prime_factors_trial_original,
     };
 
     #[test]
@@ -310,6 +311,15 @@ mod tests {
     #[test]
     fn factors_powers() {
         assert_eq!(prime_factors(1_024), vec![2; 10]);
+    }
+
+    #[test]
+    fn counts_decimal_digits() {
+        assert_eq!(decimal_digit_count(0), 1);
+        assert_eq!(decimal_digit_count(1), 1);
+        assert_eq!(decimal_digit_count(9), 1);
+        assert_eq!(decimal_digit_count(10), 2);
+        assert_eq!(decimal_digit_count(u128::MAX), 39);
     }
 
     #[test]
