@@ -138,21 +138,39 @@ fn parse_positive_integer(input: &str) -> Result<u128, String> {
 
 fn print_debug_timings(number: u128) -> Result<(), String> {
     let automatic_algorithm = factorization_algorithm(number);
-
-    println!("Input: {number} ({} digits)", decimal_digit_count(number));
-    println!("Automatic algorithm: {}", automatic_algorithm.label());
-    println!("Result: {}", format_factorization(number));
-    println!(
-        "Algorithm timings ({}s timeout per algorithm):",
-        DEBUG_ALGORITHM_TIMEOUT.as_secs()
-    );
+    let mut outcomes = Vec::new();
 
     for algorithm in [
         FactorizationAlgorithm::OriginalTrialDivision,
         FactorizationAlgorithm::SixKTrialDivision,
         FactorizationAlgorithm::PollardRho,
     ] {
-        match benchmark_algorithm(number, algorithm)? {
+        outcomes.push((algorithm, benchmark_algorithm(number, algorithm)?));
+    }
+
+    let automatic_result = outcomes.iter().find_map(|(algorithm, outcome)| {
+        match (algorithm == &automatic_algorithm, outcome) {
+            (true, BenchmarkOutcome::Completed { output, .. }) => Some(output.as_str()),
+            _ => None,
+        }
+    });
+
+    println!("Input: {number} ({} digits)", decimal_digit_count(number));
+    println!("Automatic algorithm: {}", automatic_algorithm.label());
+    match automatic_result {
+        Some(output) => println!("Result: {output}"),
+        None => println!(
+            "Result: automatic algorithm did not finish within {}s",
+            DEBUG_ALGORITHM_TIMEOUT.as_secs()
+        ),
+    }
+    println!(
+        "Algorithm timings ({}s timeout per algorithm):",
+        DEBUG_ALGORITHM_TIMEOUT.as_secs()
+    );
+
+    for (algorithm, outcome) in outcomes {
+        match outcome {
             BenchmarkOutcome::Completed { elapsed, output } => {
                 println!(
                     "- {}: {} ({})",

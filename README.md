@@ -69,6 +69,9 @@ Each algorithm runs in a separate process with a 5-second timeout, so very slow
 trial-division cases do not block the whole comparison forever. For meaningful
 timings, run the release binary rather than `cargo run`.
 
+If the automatically selected algorithm times out, debug mode reports that
+instead of blocking while trying to print the final factorization.
+
 ## Test
 
 ```bash
