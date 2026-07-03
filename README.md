@@ -65,9 +65,21 @@ Show usage:
 The app chooses the factorization method from the input length:
 
 - numbers with up to 15 decimal digits use `6k +/- 1` trial division
-- longer numbers use Pollard's Rho with Miller-Rabin probable-prime checks
+- longer numbers use Pollard's Rho (Brent's variant with batched gcds) with
+  Miller-Rabin probable-prime checks
 
 The output format is the same for both paths.
+
+Pass `--algorithm` to skip the automatic selection and force one
+implementation:
+
+```bash
+./target/release/primes --algorithm pollard-rho 84
+```
+
+Valid algorithm names are `original`, `six-k`, and `pollard-rho`. The
+`--algorithm` form runs in-process without a timeout; debug mode uses it
+internally to benchmark each algorithm in a separate process.
 
 ## Debug Timings
 

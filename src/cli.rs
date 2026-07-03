@@ -171,6 +171,10 @@ fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, Strin
                 index += 1;
             }
             "--timeout" => {
+                if timeout.is_some() {
+                    return Err(String::from("Duplicate --timeout flag"));
+                }
+
                 let seconds = args
                     .get(index + 1)
                     .ok_or_else(|| String::from("--timeout requires seconds"))?;
@@ -204,7 +208,7 @@ fn parse_command(args: impl Iterator<Item = String>) -> Result<CliCommand, Strin
 
 fn usage() -> String {
     String::from(
-        "Usage: primes [--debug] [--timeout <seconds>] <positive-integer>\n       primes --version\n       primes --help",
+        "Usage: primes [--debug] [--timeout <seconds>] <positive-integer>\n       primes --algorithm <original|six-k|pollard-rho> <positive-integer>\n       primes --version\n       primes --help",
     )
 }
 
@@ -385,6 +389,19 @@ mod tests {
         assert!(parse_command(["10", "20"].map(String::from).into_iter()).is_err());
         assert!(parse_command(["abc"].map(String::from).into_iter()).is_err());
         assert!(parse_command(["0"].map(String::from).into_iter()).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_flags() {
+        assert!(parse_command(["--debug", "--debug", "84"].map(String::from).into_iter()).is_err());
+        assert!(
+            parse_command(
+                ["--timeout", "5", "--timeout", "10", "84"]
+                    .map(String::from)
+                    .into_iter()
+            )
+            .is_err()
+        );
     }
 
     #[test]

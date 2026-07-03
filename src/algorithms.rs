@@ -1,4 +1,5 @@
 const TRIAL_DIVISION_MAX_DIGITS: usize = 15;
+const POLLARD_RHO_BATCH_SIZE: u128 = 128;
 const MILLER_RABIN_BASES: [u128; 16] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,28 +157,59 @@ fn pollard_rho_divisor(number: u128) -> u128 {
 
     loop {
         let constant_mod = constant % number;
-        let mut x = 2 + constant_mod % (number - 3);
-        let mut y = x;
-        let mut divisor = 1;
-        let mut iterations = 0;
+        let start = 2 + constant_mod % (number - 3);
 
-        while divisor == 1 && iterations < 100_000 {
-            x = pollard_rho_step(x, constant_mod, number);
-            y = pollard_rho_step(
-                pollard_rho_step(y, constant_mod, number),
-                constant_mod,
-                number,
-            );
-            divisor = gcd(x.abs_diff(y), number);
-            iterations += 1;
-        }
-
-        if divisor > 1 && divisor < number {
+        if let Some(divisor) = brent_cycle_divisor(number, constant_mod, start) {
             return divisor;
         }
 
         constant += 1;
     }
+}
+
+fn brent_cycle_divisor(number: u128, constant: u128, start: u128) -> Option<u128> {
+    let mut current = start;
+    let mut batch_start = start;
+    let mut segment_length: u128 = 1;
+    let mut product: u128 = 1;
+    let mut divisor = 1;
+
+    let anchor = loop {
+        let anchor = current;
+        for _ in 0..segment_length {
+            current = pollard_rho_step(current, constant, number);
+        }
+
+        let mut compared = 0;
+        while compared < segment_length && divisor == 1 {
+            batch_start = current;
+            let batch_size = POLLARD_RHO_BATCH_SIZE.min(segment_length - compared);
+
+            for _ in 0..batch_size {
+                current = pollard_rho_step(current, constant, number);
+                product = mul_mod(product, anchor.abs_diff(current), number);
+            }
+
+            divisor = gcd(product, number);
+            compared += batch_size;
+        }
+
+        if divisor != 1 {
+            break anchor;
+        }
+
+        segment_length *= 2;
+    };
+
+    if divisor == number {
+        divisor = 1;
+        while divisor == 1 {
+            batch_start = pollard_rho_step(batch_start, constant, number);
+            divisor = gcd(anchor.abs_diff(batch_start), number);
+        }
+    }
+
+    (divisor < number).then_some(divisor)
 }
 
 fn pollard_rho_step(value: u128, constant: u128, modulus: u128) -> u128 {
@@ -288,9 +320,9 @@ fn gcd(mut left: u128, mut right: u128) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::{
-        FactorizationAlgorithm, decimal_digit_count, factorization_algorithm,
-        is_probably_prime_miller_rabin, prime_factors, prime_factors_trial_6k,
-        prime_factors_trial_original,
+        FactorizationAlgorithm, decimal_digit_count, factor_with_algorithm,
+        factorization_algorithm, is_probably_prime_miller_rabin, prime_factors,
+        prime_factors_trial_6k, prime_factors_trial_original,
     };
 
     #[test]
@@ -340,6 +372,18 @@ mod tests {
         assert_eq!(
             prime_factors(1_000_000_016_000_000_063),
             vec![1_000_000_007, 1_000_000_009]
+        );
+    }
+
+    #[test]
+    fn factors_directly_with_pollard_rho() {
+        assert_eq!(
+            factor_with_algorithm(84, FactorizationAlgorithm::PollardRho),
+            vec![2, 2, 3, 7]
+        );
+        assert_eq!(
+            factor_with_algorithm(999_999_943_999_999_559, FactorizationAlgorithm::PollardRho),
+            vec![999_999_937, 1_000_000_007]
         );
     }
 
