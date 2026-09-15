@@ -3,13 +3,24 @@
 A small Rust command-line app that prints the prime factorization of a positive
 integer.
 
-## Run
+## Clean Installation
 
-From this directory:
+Prerequisites: Rust and Cargo with support for the Rust 2024 edition declared in
+`Cargo.toml`, plus the linker/build tools required by your platform. The development
+checks below also use the Clippy and rustfmt components.
+
+From the parent directory of a fresh checkout, enter the repository and build:
 
 ```bash
-cargo run -- 84
+cd primes
+cargo build --locked --release
+./target/release/primes 84
 ```
+
+Keep the checked-in `Cargo.lock`. `--locked` requires Cargo to use it without
+updating it. Cargo automatically restores any missing downloaded crates during
+the build; this project currently declares no external dependencies. No separate
+dependency installation or environment-variable/secret setup is required.
 
 Output:
 
@@ -17,17 +28,58 @@ Output:
 84 = 2 * 2 * 3 * 7
 ```
 
-## Build A Binary
+## Normal Development
+
+Run these commands from the repository root:
 
 ```bash
-cargo build --release
+cargo build --locked
+cargo run --locked -- 84
 ```
 
-Then run the compiled binary directly:
+Cargo reuses existing build artifacts and rebuilds what changed. `cargo run`
+builds before running; ordinary source changes do not require removing
+dependencies or cleaning the build output. There is no configured watch command;
+rerun these commands after editing.
+
+Run the unit and CLI integration tests, lint checks, and formatting check:
 
 ```bash
+cargo test --locked
+cargo clippy --locked -- -D warnings
+cargo fmt --check
+```
+
+For an optimized binary (including meaningful algorithm timings):
+
+```bash
+cargo build --locked --release
 ./target/release/primes 84
 ```
+
+## Clean Rebuild
+
+The repository's regenerable Cargo output is `target/`, which is ignored by Git.
+From the repository root, use the following sequence when a full rebuild is
+needed, including after local build output has been removed:
+
+```bash
+cargo clean --target-dir target
+cargo build --locked --release --target-dir target
+./target/release/primes 84
+```
+
+The explicit `--target-dir target` keeps cleanup and rebuilding in this checkout's
+`target/` directory even if your Cargo settings select another output location.
+Before cleaning, ensure `target/` is project-owned build output and is not a
+symlink to a shared directory or a location containing user data. The other
+commands in this README assume Cargo's default local `target/` location.
+
+Keep source, configuration, any `.env` files, user data, and `Cargo.lock`. Do not
+clear global Cargo caches, rustup toolchains, installed targets, or installed
+executables. Cargo restores missing crates as part of the locked build. These
+workflows build and run locally; they do not install a second global binary or
+publish a release.
 
 ## Examples
 
@@ -107,11 +159,3 @@ forever. For meaningful timings, run the release binary rather than `cargo run`.
 
 If the automatically selected algorithm times out, debug mode reports that
 instead of blocking while trying to print the final factorization.
-
-## Test
-
-```bash
-cargo test
-cargo clippy -- -D warnings
-cargo fmt --check
-```
